@@ -42,13 +42,18 @@ pub(crate) use strokewidthpicker::StrokeWidthPicker;
 pub(crate) use unitentry::UnitEntry;
 pub(crate) use workspacebrowser::WorkspaceBrowser;
 
-use gtk4::prelude::*;
 extern crate nalgebra as na;
 extern crate parry2d_f64 as p2d;
+
+use gtk4::prelude::*;
 
 fn main() -> anyhow::Result<()> {
     #[cfg(target_os = "windows")]
     setup_windows_env();
+    #[cfg(target_os = "macos")]
+    if let Err(e) = setup_macos_env() {
+        eprintln!("failed to setup env for macos, Err: {e:?}");
+    }
 
     let app = RnoteApp::new();
     app.run();
@@ -67,4 +72,33 @@ fn setup_windows_env() {
         "GDK_PIXBUF_MODULEDIR",
         config::LIBDIR.to_string() + "/gdk-pixbuf-2.0/2.10.0/loaders",
     );
+}
+
+/// we need to set some env vars for macos app bundles
+#[cfg(target_os = "macos")]
+fn setup_macos_env() -> anyhow::Result<()> {
+    use std::ffi::OsStr;
+    use std::path::{Component, PathBuf};
+
+    let current_dir = std::env::current_dir()?.canonicalize()?;
+    if current_dir
+        .components()
+        .zip(current_dir.components().skip(1))
+        .any(|(a, b)| {
+            if let (Component::Normal(a), Component::Normal(b)) = (a, b) {
+                a == OsStr::new("Contents") && b == OsStr::new("MacOS")
+            } else {
+                false
+            }
+        })
+    {
+        std::env::set_var("XDG_DATA_DIRS", &current_dir.join("/..Resources/share"));
+        std::env::set_var(
+            "GDK_PIXBUF_MODULE_FILE",
+            current_dir.join(PathBuf::from(
+                "/../Resources/lib/gdk-pixbuf-2.0/2.10.0/loaders/loaders.cache",
+            )),
+        );
+    }
+    Ok(())
 }
